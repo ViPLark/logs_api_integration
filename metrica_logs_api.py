@@ -1,3 +1,4 @@
+import traceback
 from collections import namedtuple
 import logs_api
 import time
@@ -105,6 +106,7 @@ def integrate_with_logs_api(user_request):
                 logs_api.clean_data(api_request)
         except Exception as e:
             logger.critical(f'Iteration #{i + 1} failed')
+            traceback.print_exc()
             logger.critical(e)
             if i == config['retries'] - 1:
                 raise e

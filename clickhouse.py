@@ -29,11 +29,14 @@ def _process_response(r):
     return result
 
 
+def _get_auth():
+    return None if (CH_USER == '') and (CH_PASSWORD == '') else (CH_USER, CH_PASSWORD)
+
+
 def get_clickhouse_data(query, host=CH_HOST):
     """Returns ClickHouse response"""
     logger.debug(query)
-    auth = (CH_USER, CH_PASSWORD) if (CH_USER == '') and (CH_PASSWORD == '') else None
-    r = requests.post(host, data=query, auth=auth, verify=SSL_VERIFY)
+    r = requests.post(host, data=query, auth=_get_auth(), verify=SSL_VERIFY)
     return _process_response(r)
 
 
@@ -43,8 +46,7 @@ def upload(table, content, host=CH_HOST):
     query_dict = {
          'query': 'INSERT INTO ' + table + ' FORMAT TabSeparatedWithNames '
     }
-    auth = (CH_USER, CH_PASSWORD) if (CH_USER == '') and (CH_PASSWORD == '') else None
-    r = requests.post(host, data=content, params=query_dict, auth=auth, verify=SSL_VERIFY)
+    r = requests.post(host, data=content, params=query_dict, auth=_get_auth(), verify=SSL_VERIFY)
     return _process_response(r)
 
 

@@ -18,6 +18,8 @@ else:
 logger = logging.getLogger('logs_api')
 
 HOST = 'https://api-metrika.yandex.ru'
+TAB = '\t'
+NEW_LINE = '\n'
 
 
 def get_estimation(user_request):
@@ -154,18 +156,20 @@ def save_data(api_request, part):
         logger.debug(r.text)
         raise ValueError(r.text)
 
-    splitted_text = r.text.split('\n')
+    splitted_headers_text, *splitted_text = [row for row in r.text.split(NEW_LINE) if row != '']
     logger.info('### DATA SAMPLE')
-    logger.info('\n'.join(splitted_text[:5]))
+    logger.info(NEW_LINE.join((splitted_headers_text, *splitted_text[:5])))
 
-    headers_num = len(splitted_text[0].split('\t'))
-    splitted_text_filtered = list(filter(lambda x: len(x.split('\t')) == headers_num, r.text.split('\n')))
+    splitted_headers = splitted_headers_text.split(TAB)
+    headers_num = len(splitted_headers)
+    splitted_text_filtered = list(filter(lambda x: (x.count(TAB) + 1 == headers_num), splitted_text))
     num_filtered = len(splitted_text) - len(splitted_text_filtered)
     if num_filtered != 0:
         logger.warning('%d rows were filtered out' % num_filtered)
     
-    if len(splitted_text_filtered) > 1:
-        output_data = '\n'.join(splitted_text_filtered)  # .encode('utf-8')
+    if len(splitted_text_filtered) > 0:
+        db_field_name_text = TAB.join(map(clickhouse.get_ch_field_name, splitted_headers))
+        output_data = NEW_LINE.join((db_field_name_text, *splitted_text_filtered))  # .encode('utf-8')
         output_data = output_data.replace(r"\'", "'")  # to correct escapes in params
 
         clickhouse.save_data(api_request.user_request.source,
