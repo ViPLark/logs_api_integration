@@ -21,7 +21,7 @@ HOST = 'https://api-metrika.yandex.ru'
 
 
 def get_estimation(user_request):
-    '''Returns estimation of Logs API (whether it's possible to load data and max period in days)'''
+    """Returns estimation of Logs API (whether it's possible to load data and max period in days)"""
     url_params = urlencode(
         [
             ('date1', user_request.start_date_str),
@@ -38,14 +38,13 @@ def get_estimation(user_request):
 
     r = requests.get(url, headers=headers)
 
-    if r.status_code == 200:
-        return json.loads(r.text)['log_request_evaluation']
-    else:
+    if r.status_code != 200:
         raise ValueError(r)
+    return json.loads(r.text)['log_request_evaluation']
 
 
 def get_api_requests(user_request):
-    '''Returns list of API requests for UserRequest'''
+    """Returns list of API requests for UserRequest"""
     api_requests = []
     estimation = get_estimation(user_request)
     if estimation['possible']:
@@ -85,64 +84,61 @@ def get_api_requests(user_request):
             )
             api_requests.append(api_request)
     else:
-        raise RuntimeError('Logs API can\'t load data: max_possible_day_quantity = 0')
+        raise RuntimeError('Logs API can`t load data: max_possible_day_quantity = 0')
     return api_requests
-  
+
+
 def create_task(api_request):
-    '''Creates a Logs API task to generate data'''
+    """Creates a Logs API task to generate data"""
     url_params = urlencode(
         [
             ('date1', api_request.date1_str),
             ('date2', api_request.date2_str),
             ('source', api_request.user_request.source),
-            ('fields', ','.join(sorted(api_request.user_request.fields, key=lambda s: s.lower())))
+            ('fields', ','.join(sorted(api_request.user_request.fields, key=str.lower))),
         ]
     )
 
-    url = '{host}/management/v1/counter/{counter_id}/logrequests?'\
-        .format(host=HOST,
-                counter_id=api_request.user_request.counter_id) \
-          + url_params
-
+    url = '{host}/management/v1/counter/{counter_id}/logrequests?' \
+        .format(host=HOST, counter_id=api_request.user_request.counter_id)
+    url += url_params
     headers = {'Authorization': 'OAuth ' + api_request.user_request.token}
-
     r = requests.post(url, headers=headers)
-    logger.debug(r.text)
-    if r.status_code == 200:
-        logger.debug(json.dumps(json.loads(r.text)['log_request'], indent=2))
-        response = json.loads(r.text)['log_request']
-        api_request.status = response['status']
-        api_request.request_id = response['request_id']
-        # api_request.size = response['size']
-        return response
-    else:
+    if r.status_code != 200:
         raise ValueError(r.text)
+
+    logger.debug(r.text)
+    logger.debug(json.dumps(json.loads(r.text)['log_request'], indent=2))
+    response = json.loads(r.text)['log_request']
+    api_request.status = response['status']
+    api_request.request_id = response['request_id']
+    # api_request.size = response['size']
+    return response
 
 
 def update_status(api_request):
-    '''Returns current tasks\'s status'''
+    """Returns current tasks`s status"""
     url = '{host}/management/v1/counter/{counter_id}/logrequest/{request_id}' \
         .format(request_id=api_request.request_id,
                 counter_id=api_request.user_request.counter_id,
                 host=HOST)
 
     headers = {'Authorization': 'OAuth ' + api_request.user_request.token}
-
     r = requests.get(url, headers=headers)
-    logger.debug(r.text)
-    if r.status_code == 200:
-        status = json.loads(r.text)['log_request']['status']
-        api_request.status = status
-        if status == 'processed':
-            size = len(json.loads(r.text)['log_request']['parts'])
-            api_request.size = size
-        return api_request
-    else:
+    if r.status_code != 200:
         raise ValueError(r.text)
+
+    logger.debug(r.text)
+    status = json.loads(r.text)['log_request']['status']
+    api_request.status = status
+    if status == 'processed':
+        size = len(json.loads(r.text)['log_request']['parts'])
+        api_request.size = size
+    return api_request
 
 
 def save_data(api_request, part):
-    '''Loads data chunk from Logs API and saves to ClickHouse'''
+    """Loads data chunk from Logs API and saves to ClickHouse"""
     url = '{host}/management/v1/counter/{counter_id}/logrequest/{request_id}/part/{part}/download' \
         .format(
             host=HOST,
@@ -158,8 +154,6 @@ def save_data(api_request, part):
         logger.debug(r.text)
         raise ValueError(r.text)
 
-
-
     splitted_text = r.text.split('\n')
     logger.info('### DATA SAMPLE')
     logger.info('\n'.join(splitted_text[:5]))
@@ -171,8 +165,8 @@ def save_data(api_request, part):
         logger.warning('%d rows were filtered out' % num_filtered)
     
     if len(splitted_text_filtered) > 1:
-        output_data = '\n'.join(splitted_text_filtered) #.encode('utf-8')
-        output_data = output_data.replace(r"\'", "'") # to correct escapes in params
+        output_data = '\n'.join(splitted_text_filtered)  # .encode('utf-8')
+        output_data = output_data.replace(r"\'", "'")  # to correct escapes in params
 
         clickhouse.save_data(api_request.user_request.source,
                              api_request.user_request.fields,
@@ -182,8 +176,9 @@ def save_data(api_request, part):
 
     api_request.status = 'saved'
 
+
 def clean_data(api_request):
-    '''Cleans generated data on server'''
+    """Cleans generated data on server"""
     url = '{host}/management/v1/counter/{counter_id}/logrequest/{request_id}/clean' \
         .format(host=HOST,
                 counter_id=api_request.user_request.counter_id,
